@@ -1,0 +1,9 @@
+{
+  "name": "Lagoa Experience",
+  "description": "Sistema de gestão de apresentações turísticas com dashboard para recepção e visualização em tempo real para clientes.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
