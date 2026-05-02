@@ -88,11 +88,11 @@ export default function ClientRegistration() {
         throw error;
       }
 
-      alert("Cliente cadastrado com sucesso! Token: " + token);
+      alert("Cliente cadastrado com sucesso! Link gerado.");
       navigate("/recepcao/dashboard");
     } catch (error: any) {
       console.error("Erro ao salvar:", error);
-      setErrorMessage(`Erro ao cadastrar no Supabase: [${error.code || 'CODE_ERR'}] ${error.message} - ${error.details || ''}`);
+      setErrorMessage(`Erro ao cadastrar no Supabase: [${error.code || 'CODE_ERR'}] ${error.message}${error.details ? ` - ${error.details}` : ''}`);
     } finally {
       setLoading(false);
     }
