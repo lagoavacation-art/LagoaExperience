@@ -65,6 +65,29 @@ export default function ClienteDetail() {
       setLoading(false);
     }
     fetchCliente();
+
+    // Inscrição Realtime para este cliente específico
+    const channel = supabase
+      .channel(`realtime-detail-${id}`)
+      .on(
+        'postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'clientes_apresentacao', 
+          filter: `id=eq.${id}` 
+        }, 
+        (payload) => {
+          console.log('Realtime Evento no Detalhe:', payload);
+          if (payload.new) {
+            setCliente(payload.new);
+            setFormData(payload.new);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [id, navigate]);
 
   const handleSave = async () => {

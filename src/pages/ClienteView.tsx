@@ -12,34 +12,56 @@ export default function ClienteView() {
   const [comentario, setComentario] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [avaliado, setAvaliado] = useState(false);
+  const [realtimeStatus, setRealtimeStatus] = useState<string>("connecting");
+
+  const buscarCliente = async () => {
+    if (!token_cliente) return;
+    
+    const { data, error } = await supabase
+      .from('cliente_apresentacao_publica')
+      .select('*')
+      .eq('token_cliente', token_cliente)
+      .single();
+
+    if (error) {
+      console.error("Erro ao carregar dados:", error);
+      setCliente(null);
+    } else {
+      setCliente(data);
+      if (data.avaliacao_nota) setAvaliado(true);
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
-    async function fetchCliente() {
-      const { data, error } = await supabase
-        .from('cliente_apresentacao_publica')
-        .select('*')
-        .eq('token_cliente', token_cliente)
-        .single();
+    if (!token_cliente) return;
 
-      if (error) {
-        console.error("Erro ao carregar dados:", error);
-      } else {
-        setCliente(data);
-        if (data.avaliacao_nota) setAvaliado(true);
-      }
-      setLoading(false);
-    }
-    fetchCliente();
+    buscarCliente();
 
     // Inscrição para atualizações em tempo real (status pode mudar enquanto o cliente está na página)
     const channel = supabase
-      .channel('client-view')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'clientes_apresentacao', filter: `token_cliente=eq.${token_cliente}` }, (payload) => {
-        setCliente((prev: any) => ({ ...prev, ...payload.new }));
-      })
-      .subscribe();
+      .channel(`realtime-cliente-${token_cliente}`)
+      .on(
+        'postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'clientes_apresentacao', 
+          filter: `token_cliente=eq.${token_cliente}` 
+        }, 
+        (payload) => {
+          console.log('Evento Realtime recebido no cliente:', payload);
+          buscarCliente();
+        }
+      )
+      .subscribe((status) => {
+        console.log('Status Realtime Cliente:', status);
+        setRealtimeStatus(status);
+      });
 
-    return () => { supabase.removeChannel(channel); };
+    return () => { 
+      supabase.removeChannel(channel); 
+    };
   }, [token_cliente]);
 
   const handleAvaliar = async (e: React.FormEvent) => {
@@ -106,10 +128,17 @@ export default function ClienteView() {
                      <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
                         <CheckCircle2 className="text-emerald-500" size={48} />
                      </div>
-                     <h2 className="text-2xl font-bold text-white mb-4">Avaliação Recebida!</h2>
-                     <p className="text-slate-400 leading-relaxed max-w-xs mx-auto">
-                        Obrigado pela sua avaliação! Sua opinião foi registrada com sucesso e nossa equipe já recebeu seu feedback.
+                     <h2 className="text-2xl font-bold text-white mb-4">Obrigado pela sua avaliação!</h2>
+                     <p className="text-slate-400 leading-relaxed mb-8">
+                        Sua opinião foi registrada com sucesso e nos ajuda a melhorar cada vez mais a experiência Lagoa Experience.
                      </p>
+                     <div className="pt-6 border-t border-white/5">
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Precisa de ajuda?</p>
+                        <p className="text-slate-400 text-xs">
+                          Caso deseje falar com nossa equipe, entre em contato com a Central de Relacionamento pelo número:
+                        </p>
+                        <a href="tel:08009605040" className="text-lg font-black text-emerald-400 hover:text-emerald-300 block mt-2">0800 960 5040</a>
+                     </div>
                   </motion.div>
                ) : (
                   <motion.form 
@@ -212,6 +241,13 @@ export default function ClienteView() {
             )}
           </AnimatePresence>
         </div>
+
+        {realtimeStatus === 'SUBSCRIBED' && (
+          <div className="px-8 py-3 bg-white/[0.02] border-t border-white/5 flex items-center justify-center gap-2">
+             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Atualização automática ativa</span>
+          </div>
+        )}
       </motion.div>
 
       <div className="mt-12 text-center relative z-10">

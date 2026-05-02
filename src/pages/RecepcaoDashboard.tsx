@@ -19,6 +19,8 @@ export default function RecepcaoDashboard() {
   const [msgSucesso, setMsgSucesso] = useState<string | null>(null);
   const [showDiagnostico, setShowDiagnostico] = useState(false);
   const [showAvaliacoes, setShowAvaliacoes] = useState(false);
+  const [realtimeStatus, setRealtimeStatus] = useState<string>("connecting");
+  const [ultimoEventoRealtime, setUltimoEventoRealtime] = useState<any>(null);
   
   const [diagnosticoResult, setDiagnosticoResult] = useState<any>(null);
 
@@ -167,14 +169,36 @@ export default function RecepcaoDashboard() {
 
   useEffect(() => {
     fetchClientes();
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes_apresentacao' }, () => {
-        fetchClientes(true);
-      })
-      .subscribe();
     
-    return () => { supabase.removeChannel(channel); };
+    console.log("Iniciando assinatura Realtime...");
+    const channel = supabase
+      .channel('realtime-recepcao-dashboard')
+      .on(
+        'postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'clientes_apresentacao' 
+        }, 
+        (payload) => {
+          console.log('Realtime payload:', payload);
+          setUltimoEventoRealtime({
+            evento: payload.eventType,
+            horario: new Date().toLocaleString('pt-BR'),
+            payload
+          });
+          fetchClientes(true); // Atualização silenciosa
+        }
+      )
+      .subscribe((status) => {
+        console.log('Realtime status:', status);
+        setRealtimeStatus(status);
+      });
+    
+    return () => { 
+      console.log("Limpando assinatura Realtime...");
+      supabase.removeChannel(channel); 
+    };
   }, [fetchClientes]);
 
   const calculateStats = (data: any[]) => {
@@ -263,6 +287,21 @@ export default function RecepcaoDashboard() {
           </div>
 
           <div className="flex items-center gap-4">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-widest ${
+              realtimeStatus === 'SUBSCRIBED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
+              realtimeStatus === 'CHANNEL_ERROR' || realtimeStatus === 'TIMED_OUT' ? 'bg-red-50 text-red-600 border-red-100' :
+              'bg-slate-50 text-slate-400 border-slate-200'
+            }`}>
+              <div className={`w-1.5 h-1.5 rounded-full ${
+                realtimeStatus === 'SUBSCRIBED' ? 'bg-emerald-500 animate-pulse' : 
+                realtimeStatus === 'CHANNEL_ERROR' || realtimeStatus === 'TIMED_OUT' ? 'bg-red-500' :
+                'bg-slate-300'
+              }`} />
+              {realtimeStatus === 'SUBSCRIBED' ? 'Tempo Real Conectado' : 
+               realtimeStatus === 'CHANNEL_ERROR' ? 'Erro Realtime' :
+               realtimeStatus === 'TIMED_OUT' ? 'Realtime Instável' : 'Conectando Realtime'}
+            </div>
+
             <button 
               onClick={() => fetchClientes()}
               disabled={updating}
@@ -316,6 +355,19 @@ export default function RecepcaoDashboard() {
                  <div className="flex items-center justify-between mb-8">
                     <h3 className="text-white font-bold flex items-center gap-2 uppercase tracking-widest text-sm"><ShieldAlert size={20} className="text-red-400"/> Diagnóstico do Supabase</h3>
                     <p className="text-[10px] text-slate-500 font-mono">Ambiente: Produção (HashRouter)</p>
+                 </div>
+
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 font-mono text-[10px] bg-black/20 p-6 rounded-2xl border border-white/5 mb-8">
+                    <div className="space-y-3">
+                       <p className="flex justify-between border-b border-white/5 pb-2"><span className="text-slate-500 uppercase font-bold">Status Subscrição:</span> <span className={realtimeStatus === 'SUBSCRIBED' ? "text-emerald-400" : "text-amber-400"}>{realtimeStatus}</span></p>
+                       <p className="flex justify-between border-b border-white/5 pb-2"><span className="text-slate-500 uppercase font-bold">Último Evento:</span> <span className="text-white">{ultimoEventoRealtime?.evento || 'Nenhum'}</span></p>
+                       <p className="flex justify-between border-b border-white/5 pb-2"><span className="text-slate-500 uppercase font-bold">Horário Evento:</span> <span className="text-white">{ultimoEventoRealtime?.horario || '--:--'}</span></p>
+                    </div>
+                    <div className="space-y-3">
+                       <p className="flex justify-between border-b border-white/5 pb-2"><span className="text-slate-500 uppercase font-bold">Última Atualização:</span> <span className="text-white">{ultimaAtualizacao?.toLocaleTimeString() || '--:--'}</span></p>
+                       <p className="flex justify-between border-b border-white/5 pb-2"><span className="text-slate-500 uppercase font-bold">Clientes Carregados:</span> <span className="text-white">{clientes.length}</span></p>
+                       <p className="flex justify-between border-b border-white/5 pb-2"><span className="text-slate-500 uppercase font-bold">URL Supabase:</span> <span className="text-slate-400 truncate ml-4" title={import.meta.env.VITE_SUPABASE_URL}>{import.meta.env.VITE_SUPABASE_URL}</span></p>
+                    </div>
                  </div>
 
                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
