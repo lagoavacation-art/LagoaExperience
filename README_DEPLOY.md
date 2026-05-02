@@ -1,30 +1,52 @@
-# Lagoa Experience - Manual de Deploy (GitHub + Vercel)
+# Lagoa Experience - Manual de Integração (GitHub + Vercel)
 
-Este projeto está configurado para uma integração nativa entre **GitHub** e **Vercel**.
+Este projeto está configurado para uma integração nativa entre **GitHub** e **Vercel**. Toda alteração enviada para o GitHub disparará um deploy automático na Vercel.
 
-## Configuração Automática (Recomendado)
+## Configuração Obrigatória no GitHub
 
-1. **GitHub**:
-   - Suba este código para o seu repositório: `https://github.com/lagoavacation-art/LagoaExperience.git`
+1. Certifique-se de que o código está na branch `main` do repositório:
+   `https://github.com/lagoavacation-art/LagoaExperience.git`
 
-2. **Vercel**:
-   - Importe o repositório do GitHub.
-   - Framework Preset: `Vite`
-   - Build Command: `npm run build`
-   - Output Directory: `dist`
-   - Adicione as Variáveis de Ambiente:
-     - `VITE_SUPABASE_URL`: `https://gkhphchabrrxvastrkyp.supabase.co`
-     - `VITE_SUPABASE_PUBLISHABLE_KEY`: `sb_publishable_kasq7letpyPu4RNhIQZWhQ_Mcx4rIxS`
+## Configuração na Vercel
+
+### 1. Importar Projeto
+- No dashboard da Vercel, clique em **"New Project"**.
+- Conecte sua conta do GitHub e importe o repositório `LagoaExperience`.
+
+### 2. Configurações de Build
+- **Framework Preset**: `Vite`
+- **Root Directory**: `./`
+- **Build Command**: `npm run build`
+- **Output Directory**: `dist`
+- **Install Command**: `npm install`
+
+### 3. Variáveis de Ambiente (CRÍTICO)
+No menu **Environment Variables**, adicione as seguintes chaves com os valores abaixo:
+
+| Chave | Valor |
+| :--- | :--- |
+| `VITE_SUPABASE_URL` | `https://gkhphchabrrxvastrkyp.supabase.co` |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_kasq7letpyPu4RNhIQZWhQ_Mcx4rIxS` |
+
+### 4. Deploy
+Clique em **"Deploy"**. A Vercel criará o build e fornecerá a URL pública.
 
 ## Estrutura de Rotas (HashRouter)
 
-A aplicação utiliza `HashRouter`, o que garante que as rotas funcionem diretamente na Vercel sem necessidade de redirecionamentos complexos:
+A aplicação utiliza `HashRouter`, o que garante que as rotas funcionem diretamente na Vercel sem necessidade de configurações no `vercel.json`:
 
 - **Login**: `https://lagoa-experience.vercel.app/#/recepcao/login`
 - **Dashboard**: `https://lagoa-experience.vercel.app/#/recepcao/dashboard`
+- **Cadastro**: `https://lagoa-experience.vercel.app/#/recepcao/cadastro`
 - **Cliente**: `https://lagoa-experience.vercel.app/#/cliente/TOKEN`
 
-## Notas Técnicas
-- O projeto é puramente estático.
-- Não requer Docker, Express ou Cloud Run.
-- Toda alteração na branch `main` disparará um deploy automático na Vercel.
+---
+
+## Manutenção e Atualização
+
+Para atualizar o site, basta fazer um push para a branch `main`:
+1. `git add .`
+2. `git commit -m "Descricão da alteracão"`
+3. `git push origin main`
+
+A Vercel detectará o push e fará o redeploy automaticamente em segundos.

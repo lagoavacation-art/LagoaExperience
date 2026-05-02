@@ -1,240 +1,224 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { 
-  Calendar, 
-  MapPin, 
-  Clock, 
-  CheckCircle2, 
-  Loader2, 
-  PartyPopper,
-  Info
-} from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
-
-interface ClientePublico {
-  token_cliente: string;
-  nome_casal: string;
-  sala_apresentacao: string;
-  data_apresentacao: string;
-  hora_apresentacao: string;
-  status_apresentacao: string;
-  horario_checkin_apresentacao: string | null;
-}
+import { Star, Send, Sparkles, CheckCircle2, Clock, MapPin, Calendar } from "lucide-react";
 
 export default function ClienteView() {
   const { token_cliente } = useParams();
-  const [cliente, setCliente] = useState<ClientePublico | null>(null);
+  const [cliente, setCliente] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [nota, setNota] = useState(0);
+  const [comentario, setComentario] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [avaliado, setAvaliado] = useState(false);
 
   useEffect(() => {
-    if (token_cliente) {
-      fetchCliente();
-      
-      // Subscribe to changes for this specific client
-      const subscription = supabase
-        .channel(`client_${token_cliente}`)
-        .on('postgres_changes', { 
-          event: 'UPDATE', 
-          schema: 'public', 
-          table: 'clientes_apresentacao',
-          filter: `token_cliente=eq.${token_cliente}`
-        }, (payload) => {
-          // Update local state when backend changes
-          setCliente(prev => prev ? { ...prev, ...payload.new } : null);
-        })
-        .subscribe();
+    async function fetchCliente() {
+      const { data, error } = await supabase
+        .from('cliente_apresentacao_publica')
+        .select('*')
+        .eq('token_cliente', token_cliente)
+        .single();
 
-      return () => {
-        supabase.removeChannel(subscription);
-      };
+      if (error) {
+        console.error("Erro ao carregar dados:", error);
+      } else {
+        setCliente(data);
+        if (data.avaliacao_nota) setAvaliado(true);
+      }
+      setLoading(false);
     }
+    fetchCliente();
+
+    // Inscrição para atualizações em tempo real (status pode mudar enquanto o cliente está na página)
+    const channel = supabase
+      .channel('client-view')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'clientes_apresentacao', filter: `token_cliente=eq.${token_cliente}` }, (payload) => {
+        setCliente((prev: any) => ({ ...prev, ...payload.new }));
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [token_cliente]);
 
-  const fetchCliente = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('cliente_apresentacao_publica')
-      .select('*')
-      .eq('token_cliente', token_cliente)
-      .maybeSingle();
+  const handleAvaliar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (nota === 0) return alert("Por favor, selecione uma nota.");
+    
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase.rpc('registrar_avaliacao_cliente', {
+        p_token_cliente: token_cliente,
+        p_nota: nota,
+        p_comentario: comentario
+      });
 
-    if (error || !data) {
-      console.error("Erro ou cliente não encontrado:", error);
-      setError(true);
-    } else {
-      setCliente(data);
+      if (error) throw error;
+      if (data.success) {
+        setAvaliado(true);
+      } else {
+        alert(data.message);
+      }
+    } catch (error) {
+       console.error("Erro ao enviar avaliação:", error);
+       alert("Erro ao enviar avaliação. Tente novamente.");
+    } finally {
+      setSubmitting(false);
     }
-    setLoading(false);
   };
 
-  const formatDate = (dateStr: string) => {
-    const [year, month, day] = dateStr.split('-');
-    return `${day}/${month}/${year}`;
-  };
-
-  const formatTime = (timeStr: string | null) => {
-    if (!timeStr) return null;
-    if (timeStr.includes('T')) {
-      return new Date(timeStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    }
-    return timeStr.slice(0, 5);
-  };
-
-  if (loading) return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
-      <Loader2 className="text-gold animate-spin mb-4" size={48} />
-      <p className="text-slate-400 font-medium">Carregando sua experiência...</p>
-    </div>
-  );
-
-  if (error || !cliente) return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
-      <div className="w-20 h-20 bg-red-500/10 text-red-500 rounded-3xl flex items-center justify-center mb-6">
-        <Info size={40} />
-      </div>
-      <h1 className="text-2xl font-bold text-white mb-2">Acesso não encontrado</h1>
-      <p className="text-slate-400 max-w-xs mb-6">O link acessado é inválido ou a apresentação expirou.</p>
-      
-      {token_cliente && (
-        <div className="px-4 py-2 bg-slate-900 border border-slate-800 rounded-lg">
-          <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Token Solicitado</p>
-          <code className="text-gold font-mono text-xs">{token_cliente}</code>
-        </div>
-      )}
-      
-      <button 
-        onClick={() => window.location.reload()}
-        className="mt-8 text-gold hover:underline text-sm font-medium"
-      >
-        Tentar novamente
-      </button>
-    </div>
-  );
+  if (loading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">Carregando experiência...</div>;
+  if (!cliente) return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white text-center p-8">Link inválido ou expirado.</div>;
 
   return (
-    <div className="min-h-screen bg-slate-950 font-sans selection:bg-gold selection:text-slate-950">
-      {/* Background decoration */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-24 -left-24 w-96 h-96 bg-gold/10 blur-[120px] rounded-full" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gold/5 blur-[160px] rounded-full" />
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 relative overflow-hidden font-sans">
+      {/* Background Decor */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-full">
+         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-600/10 blur-[120px] rounded-full" />
+         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-600/10 blur-[120px] rounded-full" />
       </div>
 
-      <main className="relative z-10 max-w-md mx-auto p-6 flex flex-col min-h-screen">
-        <header className="py-12 text-center">
-          <motion.div 
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="inline-flex w-14 h-14 bg-gradient-to-br from-gold to-orange-400 text-slate-950 font-black rounded-2xl items-center justify-center text-2xl shadow-lg shadow-gold/20 mb-4"
-          >
-            L
-          </motion.div>
-          <h2 className="text-slate-500 uppercase tracking-[0.25em] text-[10px] font-bold">Lagoa Experience</h2>
-        </header>
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="w-full max-w-xl bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl relative z-10"
+      >
+        <div className="p-8 md:p-12">
+          {/* Header */}
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-600 rounded-[1.25rem] mb-6 shadow-lg shadow-emerald-900/20">
+               <Sparkles className="text-white" size={32} />
+            </div>
+            <h1 className="text-2xl font-bold text-white tracking-tight mb-2">Olá, {cliente.nome_casal}</h1>
+            <p className="text-slate-400 font-medium">Bem-vindo ao Lagoa Experience</p>
+          </div>
 
-        <div className="flex-1">
           <AnimatePresence mode="wait">
             {cliente.status_apresentacao === 'finalizado' ? (
-              <motion.div 
-                key="finalizado"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-slate-900 border border-slate-800 rounded-[32px] p-8 text-center"
-              >
-                <div className="w-20 h-20 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <PartyPopper size={40} />
-                </div>
-                <h1 className="text-2xl font-bold text-white mb-4">Apresentação finalizada</h1>
-                <p className="text-slate-400 leading-relaxed">
-                  Agradecemos imensamente a sua presença no Lagoa Experience. Esperamos que sua experiência tenha sido incrível!
-                </p>
-              </motion.div>
+               avaliado ? (
+                  <motion.div 
+                    key="avaliado"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-center py-10"
+                  >
+                     <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <CheckCircle2 className="text-emerald-500" size={48} />
+                     </div>
+                     <h2 className="text-2xl font-bold text-white mb-4">Avaliação Recebida!</h2>
+                     <p className="text-slate-400 leading-relaxed max-w-xs mx-auto">
+                        Obrigado pela sua avaliação! Sua opinião foi registrada com sucesso e nossa equipe já recebeu seu feedback.
+                     </p>
+                  </motion.div>
+               ) : (
+                  <motion.form 
+                    key="form-avaliacao"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    onSubmit={handleAvaliar} 
+                    className="space-y-8"
+                  >
+                     <div className="text-center">
+                        <h2 className="text-xl font-bold text-white mb-2">Como foi sua experiência?</h2>
+                        <p className="text-slate-400 text-sm">Sua opinião é muito importante para continuarmos melhorando o atendimento Lagoa Experience.</p>
+                     </div>
+
+                     <div className="flex justify-center gap-3">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                           <button
+                             key={star}
+                             type="button"
+                             onClick={() => setNota(star)}
+                             className="group transition-transform active:scale-90"
+                           >
+                              <Star 
+                                size={44} 
+                                className={`transition-all ${star <= nota ? "text-amber-500 fill-amber-500 scale-110" : "text-white/10 hover:text-white/20"}`} 
+                              />
+                           </button>
+                        ))}
+                     </div>
+
+                     <div className="space-y-4">
+                        <textarea 
+                           placeholder="Conte como foi sua experiência..."
+                           className="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-white placeholder:text-slate-600 outline-none focus:border-emerald-500/50 transition-all min-h-[140px] resize-none"
+                           value={comentario}
+                           onChange={e => setComentario(e.target.value)}
+                        />
+                        <button 
+                           type="submit"
+                           disabled={submitting || nota === 0}
+                           className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 disabled:hover:bg-emerald-600 text-white font-bold rounded-2xl transition-all shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-3"
+                        >
+                           {submitting ? "Enviando..." : <><Send size={18} /> Enviar avaliação</>}
+                        </button>
+                     </div>
+                  </motion.form>
+               )
             ) : (
-              <motion.div 
-                key="ativo"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="space-y-6"
-              >
-                {/* Main Card */}
-                <div className="bg-slate-900 border border-gold/20 rounded-[32px] p-8 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-4 opacity-10">
-                    <CheckCircle2 size={120} />
+               <motion.div 
+                 key="status-info"
+                 initial={{ opacity: 0 }}
+                 animate={{ opacity: 1 }}
+                 className="space-y-8"
+               >
+                  <div className="bg-white/5 border border-white/10 rounded-[2rem] p-8 space-y-6">
+                     <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-400">
+                           <Calendar size={20} />
+                        </div>
+                        <div>
+                           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none mb-1">Data da Visita</p>
+                           <p className="text-white font-bold">{cliente.data_apresentacao}</p>
+                        </div>
+                     </div>
+                     <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400">
+                           <MapPin size={20} />
+                        </div>
+                        <div>
+                           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none mb-1">Localização</p>
+                           <p className="text-white font-bold">{cliente.sala_apresentacao}</p>
+                        </div>
+                     </div>
                   </div>
 
-                  <h1 className="text-3xl font-bold text-white leading-tight mb-8">
-                    Olá,<br />
-                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold to-orange-300">
-                      {cliente.nome_casal}
-                    </span>
-                  </h1>
-
-                  <div className="space-y-6">
-                    <div className="flex gap-4">
-                      <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center text-gold shrink-0">
-                        <MapPin size={22} />
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Localização</p>
-                        <p className="text-lg font-bold text-slate-200">{cliente.sala_apresentacao}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-4">
-                      <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center text-gold shrink-0">
-                        <Calendar size={22} />
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Data e Horário</p>
-                        <p className="text-lg font-bold text-slate-200">
-                          {formatDate(cliente.data_apresentacao)} às {cliente.hora_apresentacao.slice(0, 5)}
-                        </p>
-                      </div>
-                    </div>
+                  <div className="text-center p-6 bg-emerald-500/5 rounded-[2rem] border border-emerald-500/10 border-dashed">
+                     {cliente.status_apresentacao === 'aguardando_checkin' ? (
+                        <>
+                           <div className="inline-flex items-center gap-2 text-amber-500 font-bold mb-2">
+                              <p className="text-sm">AGUARDANDO RECEPÇÃO</p>
+                           </div>
+                           <p className="text-slate-400 text-sm leading-relaxed px-4">
+                              Sua apresentação está agendada para às <span className="text-white font-bold">{cliente.hora_apresentacao}h</span>. 
+                              Aguardando confirmação de presença pela recepção.
+                           </p>
+                        </>
+                     ) : (
+                        <>
+                           <div className="inline-flex items-center gap-2 text-emerald-500 font-bold mb-2">
+                              <CheckCircle2 size={16} />
+                              <p className="text-sm uppercase tracking-wider font-black">Presente</p>
+                           </div>
+                           <p className="text-slate-400 text-sm leading-relaxed px-4">
+                              Check-in efetuado com sucesso. Sua presença foi registrada pela recepção às <span className="text-white font-bold">{new Date(cliente.horario_checkin_apresentacao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}h</span>.
+                           </p>
+                        </>
+                     )}
                   </div>
-                </div>
-
-                {/* Status Card */}
-                <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-[32px] p-8">
-                  {cliente.status_apresentacao === 'em_apresentacao' ? (
-                    <div className="flex flex-col items-center text-center">
-                      <div className="w-16 h-16 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center mb-6 relative">
-                         <CheckCircle2 size={32} />
-                         <span className="absolute inset-0 rounded-full border-2 border-emerald-400 animate-ping opacity-20" />
-                      </div>
-                      <h3 className="text-xl font-bold text-white mb-2">Check-in Realizado</h3>
-                      <p className="text-sm text-slate-400 mb-4 font-medium uppercase tracking-widest">
-                        Registrado às {formatTime(cliente.horario_checkin_apresentacao)}
-                      </p>
-                      <p className="text-slate-500 text-sm">
-                        Sua presença foi registrada com sucesso. Aproveite a apresentação!
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center text-center">
-                      <div className="w-16 h-16 bg-gold/10 text-gold rounded-full flex items-center justify-center mb-6 animate-pulse">
-                         <Clock size={32} />
-                      </div>
-                      <h3 className="text-xl font-bold text-white mb-2">Aguardando Recepção</h3>
-                      <p className="text-slate-400 text-sm max-w-[200px] mx-auto">
-                        Aguardando confirmação de presença pela recepção da sala.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
+               </motion.div>
             )}
           </AnimatePresence>
         </div>
+      </motion.div>
 
-        <footer className="py-12 text-center">
-          <p className="text-[10px] text-slate-600 font-bold uppercase tracking-[0.3em]">
+      <div className="mt-12 text-center relative z-10">
+         <p className="text-[10px] text-slate-700 font-black uppercase tracking-[0.4em]">
             &copy; {new Date().getFullYear()} Lagoa Experience Group
-          </p>
-        </footer>
-      </main>
+         </p>
+      </div>
     </div>
   );
 }
