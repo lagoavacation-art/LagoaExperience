@@ -8,7 +8,7 @@ export default function ClientRegistration() {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     nome_casal: "",
-    sala_apresentacao: "Sala Lagoa Quente",
+    sala_apresentacao: "Sala Lagoa Eco Towers",
     data_apresentacao: new Date().toISOString().split('T')[0],
     hora_apresentacao: "12:00",
     token_cliente: ""
@@ -80,9 +80,9 @@ export default function ClientRegistration() {
                     onChange={e => setFormData({...formData, sala_apresentacao: e.target.value})}
                     className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-gold outline-none appearance-none"
                   >
-                    <option>Sala Lagoa Quente</option>
-                    <option>Sala Eco Praia</option>
-                    <option>Sala VIP</option>
+                    <option>Sala Lagoa Eco Towers</option>
+                    <option>Sala Lagoa Quente - Parque</option>
+                    <option>Sala Centro de Negócios</option>
                   </select>
                 </div>
               </div>

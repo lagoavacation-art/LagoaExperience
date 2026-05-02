@@ -102,18 +102,14 @@ export default function RecepcaoDashboard() {
   };
 
   const copyLink = (token: string) => {
-    // Usar location.origin para garantir que o link seja absoluto e comece da raiz
-    // Remove qualquer barra final do origin e adiciona o hash corretamente
-    const origin = window.location.origin.replace(/\/$/, '');
-    const url = `${origin}/#/cliente/${token}`;
+    const url = `${window.location.origin}/#/cliente/${token}`;
     
     navigator.clipboard.writeText(url);
     alert("Link copiado para o cliente!\n" + url);
   };
 
   const openLink = (token: string) => {
-    const origin = window.location.origin.replace(/\/$/, '');
-    const url = `${origin}/#/cliente/${token}`;
+    const url = `${window.location.origin}/#/cliente/${token}`;
     window.open(url, '_blank');
   };
 

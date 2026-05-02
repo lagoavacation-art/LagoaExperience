@@ -148,7 +148,7 @@ export default function ClienteView() {
                 </div>
                 <h1 className="text-2xl font-bold text-white mb-4">Apresentação finalizada</h1>
                 <p className="text-slate-400 leading-relaxed">
-                  Agradecemos imensamente a sua presença no Lagoa Quente. Esperamos que sua experiência tenha sido incrível!
+                  Agradecemos imensamente a sua presença no Lagoa Experience. Esperamos que sua experiência tenha sido incrível!
                 </p>
               </motion.div>
             ) : (
@@ -231,7 +231,7 @@ export default function ClienteView() {
 
         <footer className="py-12 text-center">
           <p className="text-[10px] text-slate-600 font-bold uppercase tracking-[0.3em]">
-            &copy; {new Date().getFullYear()} Lagoa Quente Group
+            &copy; {new Date().getFullYear()} Lagoa Experience Group
           </p>
         </footer>
       </main>
