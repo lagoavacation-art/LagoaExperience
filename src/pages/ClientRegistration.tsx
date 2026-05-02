@@ -47,6 +47,7 @@ export default function ClientRegistration() {
     };
 
     console.log('Payload enviado ao Supabase:', payload);
+    setDebugInfo({ last_attempt: new Date().toISOString(), payload });
 
     try {
       const { data, error } = await supabase
@@ -57,7 +58,7 @@ export default function ClientRegistration() {
       console.log('Resposta Supabase:', { data, error });
 
       if (error) {
-        setDebugInfo(error);
+        setDebugInfo({ error, payload, time: new Date().toISOString() });
         throw error;
       }
 
@@ -77,12 +78,21 @@ export default function ClientRegistration() {
   return (
     <div className="min-h-screen bg-slate-50 py-12 px-4">
       <div className="max-w-4xl mx-auto">
-        <button 
-          onClick={() => navigate("/recepcao/dashboard")}
-          className="flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold mb-8 transition-colors"
-        >
-          <ArrowLeft size={18} /> Voltar ao Dashboard
-        </button>
+        <div className="flex items-center justify-between mb-8">
+          <button 
+            onClick={() => navigate("/recepcao/dashboard")}
+            className="flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold transition-colors"
+          >
+            <ArrowLeft size={18} /> Voltar ao Dashboard
+          </button>
+          
+          <button 
+            onClick={() => setDebugInfo(debugInfo ? null : { status: 'Aguardando ação' })}
+            className="text-xs font-bold text-slate-400 hover:text-slate-900 flex items-center gap-1"
+          >
+            <ShieldAlert size={14} /> {debugInfo ? "Esconder Depuração" : "Ver Depuração"}
+          </button>
+        </div>
 
         {errorMessage && (
           <div className="mb-8 p-6 bg-red-50 border border-red-100 rounded-2xl">
@@ -90,13 +100,27 @@ export default function ClientRegistration() {
               <ShieldAlert size={20} /> Erro do Banco de Dados
             </p>
             <p className="text-red-600 text-sm font-medium mb-4">{errorMessage}</p>
-            {debugInfo && (
-              <div className="bg-black/5 p-4 rounded-xl text-xs font-mono text-red-800 overflow-x-auto">
-                <p className="mb-1 uppercase font-bold text-[10px]">Detalhes Técnicos:</p>
-                <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
-              </div>
-            )}
           </div>
+        )}
+
+        {debugInfo && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="mb-8 p-6 bg-slate-900 rounded-2xl text-slate-300 font-mono text-[10px] border border-slate-800 shadow-xl"
+          >
+            <p className="text-white font-bold mb-4 flex items-center gap-2 uppercase tracking-widest text-[10px]"><ShieldAlert size={14} className="text-red-400"/> Depuração Supabase (Cadastro)</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+               <div>
+                  <p className="text-slate-500 mb-1">Último Payload:</p>
+                  <pre className="bg-black/20 p-3 rounded-lg overflow-x-auto max-h-40">{JSON.stringify(debugInfo.payload || {}, null, 2)}</pre>
+               </div>
+               <div>
+                  <p className="text-slate-500 mb-1">Última Resposta / Erro:</p>
+                  <pre className="bg-black/20 p-3 rounded-lg overflow-x-auto max-h-40">{JSON.stringify(debugInfo.error || debugInfo.data || debugInfo, null, 2)}</pre>
+               </div>
+            </div>
+          </motion.div>
         )}
 
         <motion.div 
