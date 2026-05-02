@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import { supabase } from "../lib/supabaseClient";
-import { ArrowLeft, Save, UserPlus, Calendar, Clock, MapPin, Building, CreditCard, Heart, Car, Home, Phone, Mail, Hash } from "lucide-react";
+import { ArrowLeft, Save, UserPlus, Calendar, Clock, MapPin, Building, CreditCard, Heart, Car, Home, Phone, Mail, Hash, ShieldAlert } from "lucide-react";
 
 export default function ClientRegistration() {
   const navigate = useNavigate();
