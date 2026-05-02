@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { 
   Users, UserCheck, Play, CheckCircle2, Star, Clock, Search, 
   Plus, LogOut, ExternalLink, Copy, Timer, ShieldAlert,
-  ChevronRight, Filter, MoreVertical, SlidersHorizontal
+  ChevronRight, Filter, MoreVertical, SlidersHorizontal, MapPin
 } from "lucide-react";
 
 export default function RecepcaoDashboard() {

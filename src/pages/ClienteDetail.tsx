@@ -4,7 +4,7 @@ import { motion } from "motion/react";
 import { supabase } from "../lib/supabaseClient";
 import { 
   ArrowLeft, Calendar, Clock, MapPin, Building, CreditCard, 
-  Heart, Car, Phone, Mail, Hash, User, Star, MessageSquare, Download
+  Heart, Car, Phone, Mail, Hash, User, Star, MessageSquare, Download, Home, Timer
 } from "lucide-react";
 
 export default function ClienteDetail() {
