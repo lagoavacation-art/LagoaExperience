@@ -38,10 +38,27 @@ export default function ClientRegistration() {
     setDebugInfo(null);
     
     // Gerar token cliente
-    const token = Math.random().toString(36).substring(2, 8) + Date.now().toString().slice(-4);
+    const token = crypto.randomUUID ? crypto.randomUUID() : `lagoa-${Math.random().toString(36).substring(2, 8)}${Date.now().toString().slice(-4)}`;
     
     const payload = {
-      ...formData,
+      nome_casal: formData.nome_casal,
+      telefone: formData.telefone,
+      cidade_estado: formData.cidade_estado,
+      profissao: formData.profissao,
+      possui_casa_propria: formData.possui_casa_propria,
+      renda: formData.renda,
+      carro: formData.carro,
+      status_civil: formData.status_civil,
+      email: formData.email,
+      valor_pago: formData.valor_pago,
+      tipo_pensao: formData.tipo_pensao,
+      data_checkin_hotel: formData.data_checkin_hotel,
+      data_checkout_hotel: formData.data_checkout_hotel,
+      numero_reserva: formData.numero_reserva,
+      hotel_hospedagem: formData.hotel_hospedagem,
+      sala_apresentacao: formData.sala_apresentacao,
+      data_apresentacao: formData.data_apresentacao,
+      hora_apresentacao: formData.hora_apresentacao,
       token_cliente: token,
       status_apresentacao: 'aguardando_checkin'
     };
@@ -58,7 +75,16 @@ export default function ClientRegistration() {
       console.log('Resposta Supabase:', { data, error });
 
       if (error) {
-        setDebugInfo({ error, payload, time: new Date().toISOString() });
+        setDebugInfo({ 
+          error: {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            hint: error.hint
+          }, 
+          payload, 
+          time: new Date().toISOString() 
+        });
         throw error;
       }
 
@@ -66,7 +92,7 @@ export default function ClientRegistration() {
       navigate("/recepcao/dashboard");
     } catch (error: any) {
       console.error("Erro ao salvar:", error);
-      setErrorMessage(`Erro ao cadastrar no Supabase: [${error.code || 'CODE_ERR'}] ${error.message}`);
+      setErrorMessage(`Erro ao cadastrar no Supabase: [${error.code || 'CODE_ERR'}] ${error.message} - ${error.details || ''}`);
     } finally {
       setLoading(false);
     }

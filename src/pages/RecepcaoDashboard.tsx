@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { 
   Users, UserCheck, Play, CheckCircle2, Star, Clock, Search, 
   Plus, LogOut, ExternalLink, Copy, Timer, ShieldAlert,
-  ChevronRight, Filter, MoreVertical, SlidersHorizontal, MapPin
+  ChevronRight, Filter, MoreVertical, SlidersHorizontal, MapPin, Trash2
 } from "lucide-react";
 
 export default function RecepcaoDashboard() {
@@ -17,9 +17,92 @@ export default function RecepcaoDashboard() {
   const [filterStatus, setFilterStatus] = useState("todos");
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date | null>(null);
   const [msgSucesso, setMsgSucesso] = useState<string | null>(null);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
-  const [showDebug, setShowDebug] = useState(false);
+  const [showDiagnostico, setShowDiagnostico] = useState(false);
+  const [showAvaliacoes, setShowAvaliacoes] = useState(false);
   
+  const [diagnosticoResult, setDiagnosticoResult] = useState<any>(null);
+
+  const executarTeste = async (nome: string, fn: () => Promise<any>) => {
+    setUpdating(true);
+    setDiagnosticoResult({ status: 'rodando', teste: nome, hora: new Date().toLocaleTimeString() });
+    try {
+      const result = await fn();
+      setDiagnosticoResult({ 
+        status: 'sucesso', 
+        teste: nome, 
+        hora: new Date().toLocaleTimeString(),
+        ...result 
+      });
+    } catch (error: any) {
+      setDiagnosticoResult({ 
+        status: 'erro', 
+        teste: nome, 
+        hora: new Date().toLocaleTimeString(),
+        error: {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        },
+        payload: error.payload
+      });
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const testes = {
+    conexao: () => executarTeste('Testar Conexão', async () => {
+      const { data, error } = await supabase.from('clientes_apresentacao').select('id').limit(1);
+      if (error) throw error;
+      return { data };
+    }),
+    listagem: () => executarTeste('Testar Listagem', async () => {
+      const { data, error } = await supabase.from('clientes_apresentacao').select('*').limit(5);
+      if (error) throw error;
+      return { count: data.length, data };
+    }),
+    cadastro: () => executarTeste('Testar Cadastro', async () => {
+      const payload = {
+        nome_casal: "TESTE DIAGNÓSTICO",
+        token_cliente: "diag-" + Date.now(),
+        sala_apresentacao: "SALA DIAG",
+        data_apresentacao: "2024-01-01",
+        hora_apresentacao: "00:00"
+      };
+      const { data, error } = await supabase.from('clientes_apresentacao').insert([payload]).select();
+      if (error) { (error as any).payload = payload; throw error; }
+      fetchClientes(true);
+      return { payload, data };
+    }),
+    exclusao: () => executarTeste('Testar Exclusão', async () => {
+      // Pega o último teste criado
+      const { data: last } = await supabase.from('clientes_apresentacao').select('id').ilike('nome_casal', '%DIAGNÓSTICO%').limit(1).single();
+      if (!last) throw { message: "Crie um cadastro de teste primeiro" };
+      const { error } = await supabase.from('clientes_apresentacao').delete().eq('id', last.id);
+      if (error) throw error;
+      fetchClientes(true);
+      return { msg: "Excluído com sucesso", id: last.id };
+    }),
+    view: () => executarTeste('Testar View Pública', async () => {
+      const { data, error } = await supabase.from('cliente_apresentacao_publica').select('*').limit(1);
+      if (error) throw error;
+      return { data };
+    }),
+    rpc: () => executarTeste('Testar Função Avaliação', async () => {
+      // Pega um cliente finalizado
+      const { data: client } = await supabase.from('clientes_apresentacao').select('token_cliente').eq('status_apresentacao', 'finalizado').limit(1).single();
+      if (!client) throw { message: "Necessário um cliente com status 'finalizado' para testar" };
+      const { data, error } = await supabase.rpc('registrar_avaliacao_cliente', {
+        p_token_cliente: client.token_cliente,
+        p_nota: 5,
+        p_comentario: "Teste de Diagnóstico"
+      });
+      if (error) throw error;
+      return { data };
+    })
+  };
+
   const [stats, setStats] = useState({
     total: 0,
     aguardando: 0,
@@ -39,7 +122,6 @@ export default function RecepcaoDashboard() {
         .order('criado_em', { ascending: false });
 
       if (error) {
-        setDebugInfo({ type: 'fetch_error', error });
         throw error;
       }
       
@@ -54,57 +136,30 @@ export default function RecepcaoDashboard() {
       }
     } catch (error: any) {
       console.error("Erro ao buscar clientes:", error);
-      setDebugInfo({ last_error: error.message, time: new Date().toISOString() });
     } finally {
       setLoading(false);
       setUpdating(false);
     }
   }, [loading]);
 
-  const testarConexao = async () => {
+  const handleDelete = async (id: string, nome: string) => {
+    if (!window.confirm(`Tem certeza que deseja excluir o cadastro de ${nome}? Essa ação não poderá ser desfeita.`)) return;
+
     setUpdating(true);
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('clientes_apresentacao')
-        .select('id, nome_casal, criado_em')
-        .limit(1);
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
       
-      if (error) throw error;
-      alert("Conexão com Supabase funcionando.");
-      setDebugInfo({ last_test: 'success', data });
-    } catch (error: any) {
-      alert(`Erro na conexão: ${error.message}`);
-      setDebugInfo({ last_test: 'failure', error });
-    } finally {
-      setUpdating(false);
-    }
-  };
-
-  const testarSalvamento = async () => {
-    setUpdating(true);
-    const token = "teste-" + Date.now();
-    const payload = {
-      nome_casal: "TESTE SISTEMA",
-      sala_apresentacao: "Sala Teste",
-      data_apresentacao: new Date().toISOString().split('T')[0],
-      hora_apresentacao: "12:00",
-      status_apresentacao: "aguardando_checkin",
-      token_cliente: token
-    };
-
-    try {
-      const { data, error } = await supabase
-        .from('clientes_apresentacao')
-        .insert([payload])
-        .select();
-
-      if (error) throw error;
-      alert("Salvamento de teste concluído com sucesso!");
-      setDebugInfo({ last_save_test: 'success', data });
+      setMsgSucesso("Cadastro excluído com sucesso.");
+      setTimeout(() => setMsgSucesso(null), 3000);
       fetchClientes(true);
     } catch (error: any) {
-      alert(`Erro no salvamento de teste: ${error.message}`);
-      setDebugInfo({ last_save_test: 'failure', error, payload });
+      console.error("Erro ao excluir:", error);
+      alert(`Erro ao excluir: [${error.code || 'ERR'}] ${error.message}`);
     } finally {
       setUpdating(false);
     }
@@ -218,11 +273,19 @@ export default function RecepcaoDashboard() {
             </button>
             
             <button 
-              onClick={() => setShowDebug(!showDebug)}
-              className={`p-2.5 rounded-xl transition-all border ${showDebug ? 'bg-slate-900 text-white' : 'text-slate-400 hover:text-slate-900 border-transparent hover:border-slate-200'}`}
-              title="Área de Depuração"
+              onClick={() => setShowDiagnostico(!showDiagnostico)}
+              className={`p-2.5 rounded-xl transition-all border ${showDiagnostico ? 'bg-slate-900 text-white' : 'text-slate-400 hover:text-slate-900 border-transparent hover:border-slate-200'}`}
+              title="Diagnóstico do Supabase"
             >
               <ShieldAlert size={20} />
+            </button>
+
+            <button 
+              onClick={() => setShowAvaliacoes(!showAvaliacoes)}
+              className={`p-2.5 rounded-xl transition-all border ${showAvaliacoes ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-indigo-600 border-transparent hover:border-indigo-100'}`}
+              title="Métricas de Avaliação"
+            >
+              <Star size={20} />
             </button>
 
             <button 
@@ -240,23 +303,9 @@ export default function RecepcaoDashboard() {
       </nav>
 
       <main className="flex-1 p-6 md:p-10 max-w-7xl mx-auto w-full space-y-10">
-        {/* Alerts & Messages */}
+        {/* Diagnóstico do Supabase */}
         <AnimatePresence>
-          {msgSucesso && (
-            <motion.div 
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="bg-emerald-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-emerald-200/50 flex items-center justify-between"
-            >
-              <span className="flex items-center gap-2"><CheckCircle2 size={18} /> {msgSucesso}</span>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Debug Area */}
-        <AnimatePresence>
-          {showDebug && (
+          {showDiagnostico && (
             <motion.div 
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
@@ -265,23 +314,125 @@ export default function RecepcaoDashboard() {
             >
               <div className="bg-slate-900 rounded-3xl p-8 text-slate-300 border border-slate-800 shadow-2xl">
                  <div className="flex items-center justify-between mb-8">
-                    <h3 className="text-white font-bold flex items-center gap-2"><ShieldAlert size={20} className="text-red-400"/> Depuração Supabase</h3>
-                    <div className="flex gap-3">
-                       <button onClick={testarConexao} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold transition-all">Testar Conexão</button>
-                       <button onClick={testarSalvamento} className="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg text-xs font-bold transition-all">Testar Salvamento</button>
-                    </div>
+                    <h3 className="text-white font-bold flex items-center gap-2 uppercase tracking-widest text-sm"><ShieldAlert size={20} className="text-red-400"/> Diagnóstico do Supabase</h3>
+                    <p className="text-[10px] text-slate-500 font-mono">Ambiente: Produção (HashRouter)</p>
                  </div>
 
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 font-mono text-xs">
-                    <div className="space-y-4">
-                       <p><span className="text-slate-500">URL:</span> {import.meta.env.VITE_SUPABASE_URL}</p>
-                       <p><span className="text-slate-500">Tabela:</span> clientes_apresentacao</p>
-                       <p><span className="text-slate-500">Auth Status:</span> {localStorage.getItem("lagoa_auth") === "true" ? "LOGADO (LOCAL)" : "DESLOGADO"}</p>
-                       <p><span className="text-slate-500">Conexão:</span> <span className={debugInfo?.last_test === 'failure' ? "text-red-400" : "text-emerald-400"}>{debugInfo?.last_test || 'não testada'}</span></p>
+                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
+                    <DiagBtn label="Conexão" onClick={testes.conexao} />
+                    <DiagBtn label="Listagem" onClick={testes.listagem} />
+                    <DiagBtn label="Cadastro" onClick={testes.cadastro} />
+                    <DiagBtn label="Exclusão" onClick={testes.exclusao} />
+                    <DiagBtn label="View Pública" onClick={testes.view} />
+                    <DiagBtn label="Avaliação (RPC)" onClick={testes.rpc} />
+                 </div>
+
+                 {diagnosticoResult && (
+                    <div className="bg-black/40 rounded-2xl border border-white/5 p-6 animate-in fade-in slide-in-from-top-4">
+                       <div className="flex items-center justify-between mb-4 border-b border-white/5 pb-4">
+                          <div className="flex items-center gap-3">
+                             <span className={`w-3 h-3 rounded-full ${diagnosticoResult.status === 'sucesso' ? 'bg-emerald-500' : diagnosticoResult.status === 'erro' ? 'bg-red-500' : 'bg-slate-500 animate-pulse'}`} />
+                             <span className="font-bold text-white text-sm uppercase">{diagnosticoResult.teste}</span>
+                          </div>
+                          <span className="text-[10px] text-slate-500 font-mono">{diagnosticoResult.hora}</span>
+                       </div>
+                       
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 font-mono">
+                          <div>
+                             <p className="text-[10px] text-slate-500 uppercase font-bold mb-2">Payload Enviado:</p>
+                             <pre className="text-[10px] bg-black/20 p-3 rounded-lg border border-white/5 overflow-x-auto max-h-40">
+                                {JSON.stringify(diagnosticoResult.payload || "Nenhum payload", null, 2)}
+                             </pre>
+                          </div>
+                          <div>
+                             <p className="text-[10px] text-slate-500 uppercase font-bold mb-2">Resposta / Erro:</p>
+                             <pre className={`text-[10px] p-3 rounded-lg border overflow-x-auto max-h-40 ${diagnosticoResult.status === 'erro' ? 'bg-red-500/10 border-red-500/20 text-red-300' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'}`}>
+                                {JSON.stringify(diagnosticoResult.error || diagnosticoResult.data || diagnosticoResult, null, 2)}
+                             </pre>
+                          </div>
+                       </div>
                     </div>
-                    <div className="bg-black/20 p-4 rounded-xl border border-white/5 max-h-40 overflow-y-auto">
-                       <p className="text-slate-500 mb-2 uppercase text-[10px] font-bold">Última Resposta / Erro:</p>
-                       <pre className="text-[10px]">{JSON.stringify(debugInfo, null, 2)}</pre>
+                 )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Mensuração de Avaliações */}
+        <AnimatePresence>
+          {showAvaliacoes && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden mb-10"
+            >
+              <div className="bg-white rounded-3xl p-8 border-2 border-indigo-100 shadow-xl shadow-indigo-100/50">
+                 <div className="flex items-center justify-between mb-8">
+                    <div>
+                      <h3 className="text-slate-900 font-black flex items-center gap-2 uppercase tracking-widest text-lg">
+                        <Star size={24} className="text-amber-500 fill-amber-500"/> Avaliações dos Clientes
+                      </h3>
+                      <p className="text-slate-400 text-xs font-bold mt-1">Métricas de satisfação e experiência</p>
+                    </div>
+                    <button onClick={() => setShowAvaliacoes(false)} className="p-2 text-slate-400 hover:text-slate-900"><MoreVertical size={20}/></button>
+                 </div>
+
+                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Resumo */}
+                    <div className="space-y-6">
+                       <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase mb-4 tracking-widest">Resumo Geral</p>
+                          <div className="flex items-end gap-3 mb-6">
+                             <span className="text-6xl font-black text-slate-900 leading-none">{stats.media.toFixed(1)}</span>
+                             <div className="flex flex-col">
+                                <div className="flex text-amber-500 mb-1">
+                                   {[1,2,3,4,5].map(s => <Star key={s} size={14} fill={s <= Math.round(stats.media) ? "currentColor" : "none"} />)}
+                                </div>
+                                <span className="text-xs font-bold text-slate-400">{stats.avaliacoes} avaliações</span>
+                             </div>
+                          </div>
+                          
+                          <div className="space-y-3">
+                             {[5,4,3,2,1].map(nota => {
+                               const count = clientes.filter(c => c.avaliacao_nota === nota).length;
+                               const per = stats.avaliacoes > 0 ? (count / stats.avaliacoes) * 100 : 0;
+                               return (
+                                 <div key={nota} className="flex items-center gap-3">
+                                   <span className="text-[10px] font-bold text-slate-400 w-4">{nota}</span>
+                                   <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                      <div className="h-full bg-amber-500" style={{ width: `${per}%` }} />
+                                   </div>
+                                   <span className="text-[10px] font-bold text-slate-500 w-6 text-right">{count}</span>
+                                 </div>
+                               );
+                             })}
+                          </div>
+                       </div>
+                    </div>
+
+                    {/* Feed de Comentários */}
+                    <div className="lg:col-span-2 space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                       <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-4">
+                          Feedback de Texto ({clientes.filter(c => c.avaliacao_comentario).length})
+                       </h4>
+                       {clientes.filter(c => c.avaliacao_nota > 0).map((c, i) => (
+                          <div key={i} className="p-4 bg-white border border-slate-100 rounded-2xl hover:border-indigo-200 transition-all">
+                             <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                   <div className="flex text-amber-500">
+                                      {[1,2,3,4,5].map(s => <Star key={s} size={10} fill={s <= c.avaliacao_nota ? "currentColor" : "none"} />)}
+                                   </div>
+                                   <span className="text-xs font-bold text-slate-900">{c.nome_casal}</span>
+                                </div>
+                                <span className="text-[10px] text-slate-400 font-mono italic">{new Date(c.avaliacao_criada_em).toLocaleDateString()}</span>
+                             </div>
+                             <p className="text-xs text-slate-600 leading-relaxed italic">"{c.avaliacao_comentario || "Nenhum comentário enviado."}"</p>
+                             <div className="mt-2 pt-2 border-t border-slate-50 flex items-center gap-3">
+                                <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">{c.sala_apresentacao}</span>
+                             </div>
+                          </div>
+                       ))}
                     </div>
                  </div>
               </div>
@@ -368,6 +519,18 @@ export default function RecepcaoDashboard() {
                         <div className="flex flex-col gap-1">
                           <span className="font-bold text-slate-900 tracking-tight">{cliente.nome_casal}</span>
                           <span className="text-xs text-slate-400 font-medium">Reserva: {cliente.numero_reserva || 'N/A'}</span>
+                          <div className="mt-2">
+                             {cliente.avaliacao_nota ? (
+                               <div className="flex items-center gap-1.5 p-1.5 bg-amber-50 rounded-lg border border-amber-100 w-fit">
+                                  <div className="flex text-amber-500">
+                                     {[1,2,3,4,5].map(s => <Star key={s} size={10} fill={s <= cliente.avaliacao_nota ? "currentColor" : "none"} />)}
+                                  </div>
+                                  <span className="text-[10px] font-black text-amber-700 truncate max-w-[120px]">{cliente.avaliacao_comentario || "Sem comentário"}</span>
+                               </div>
+                             ) : (
+                               <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest italic">Sem avaliação</span>
+                             )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-6 hidden md:table-cell">
@@ -402,8 +565,21 @@ export default function RecepcaoDashboard() {
                               <CheckCircle2 size={14}/> Check-out
                             </button>
                           )}
+                          {cliente.status_apresentacao === 'finalizado' && (
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/recepcao/cliente/${cliente.id}`);
+                              }}
+                              className="px-4 py-2 bg-indigo-50 border border-indigo-100 text-indigo-600 text-xs font-bold rounded-lg transition-all flex items-center gap-2 hover:bg-indigo-100"
+                              title="Mensurar Experiência"
+                            >
+                              <Star size={14}/> {cliente.avaliacao_nota ? "Ver Avaliação" : "Mensurar"}
+                            </button>
+                          )}
                           <button 
-                             onClick={() => {
+                             onClick={(e) => {
+                               e.stopPropagation();
                                const url = `${window.location.origin}/#/cliente/${cliente.token_cliente}`;
                                navigator.clipboard.writeText(url);
                                alert("Link copiado para o cliente!");
@@ -413,6 +589,18 @@ export default function RecepcaoDashboard() {
                           >
                             <Copy size={16}/>
                           </button>
+                          
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(cliente.id, cliente.nome_casal);
+                            }}
+                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 rounded-lg transition-all"
+                            title="Excluir Cadastro"
+                          >
+                            <Trash2 size={16}/>
+                          </button>
+
                           <button className="p-2 text-slate-400 hover:text-slate-900 rounded-lg transition-all">
                             <ChevronRight size={20}/>
                           </button>
@@ -458,5 +646,16 @@ function StatCard({ icon, label, value, color }: { icon: any, label: string, val
       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-1">{label}</p>
       <p className="text-3xl font-black text-slate-900 tracking-tight">{value}</p>
     </div>
+  );
+}
+
+function DiagBtn({ label, onClick }: { label: string, onClick: () => void }) {
+  return (
+    <button 
+      onClick={onClick}
+      className="px-3 py-2 bg-white/5 hover:bg-white/15 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:text-white"
+    >
+      {label}
+    </button>
   );
 }
