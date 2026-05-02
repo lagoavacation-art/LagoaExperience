@@ -28,29 +28,44 @@ export default function ClientRegistration() {
     hora_apresentacao: "12:00"
   });
 
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMessage(null);
+    setDebugInfo(null);
     
     // Gerar token cliente
     const token = Math.random().toString(36).substring(2, 8) + Date.now().toString().slice(-4);
+    
+    const payload = {
+      ...formData,
+      token_cliente: token,
+      status_apresentacao: 'aguardando_checkin'
+    };
+
+    console.log('Payload enviado ao Supabase:', payload);
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('clientes_apresentacao')
-        .insert([{
-          ...formData,
-          token_cliente: token,
-          status_apresentacao: 'aguardando_checkin'
-        }]);
+        .insert([payload])
+        .select();
 
-      if (error) throw error;
+      console.log('Resposta Supabase:', { data, error });
+
+      if (error) {
+        setDebugInfo(error);
+        throw error;
+      }
 
       alert("Cliente cadastrado com sucesso! Token: " + token);
       navigate("/recepcao/dashboard");
     } catch (error: any) {
       console.error("Erro ao salvar:", error);
-      alert("Erro ao cadastrar no Supabase: " + (error.message || "Entre em contato com o suporte"));
+      setErrorMessage(`Erro ao cadastrar no Supabase: [${error.code || 'CODE_ERR'}] ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -68,6 +83,21 @@ export default function ClientRegistration() {
         >
           <ArrowLeft size={18} /> Voltar ao Dashboard
         </button>
+
+        {errorMessage && (
+          <div className="mb-8 p-6 bg-red-50 border border-red-100 rounded-2xl">
+            <p className="text-red-700 font-bold flex items-center gap-2 mb-2">
+              <ShieldAlert size={20} /> Erro do Banco de Dados
+            </p>
+            <p className="text-red-600 text-sm font-medium mb-4">{errorMessage}</p>
+            {debugInfo && (
+              <div className="bg-black/5 p-4 rounded-xl text-xs font-mono text-red-800 overflow-x-auto">
+                <p className="mb-1 uppercase font-bold text-[10px]">Detalhes Técnicos:</p>
+                <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
+              </div>
+            )}
+          </div>
+        )}
 
         <motion.div 
           initial={{ opacity: 0, y: 20 }}

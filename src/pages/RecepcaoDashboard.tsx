@@ -12,8 +12,14 @@ export default function RecepcaoDashboard() {
   const navigate = useNavigate();
   const [clientes, setClientes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("todos");
+  const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date | null>(null);
+  const [msgSucesso, setMsgSucesso] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [showDebug, setShowDebug] = useState(false);
+  
   const [stats, setStats] = useState({
     total: 0,
     aguardando: 0,
@@ -24,32 +30,92 @@ export default function RecepcaoDashboard() {
     atrasados: 0
   });
 
-  const fetchClientes = useCallback(async () => {
+  const fetchClientes = useCallback(async (isSilent = false) => {
+    if (!isSilent) setUpdating(true);
     try {
       const { data, error } = await supabase
         .from('clientes_apresentacao')
         .select('*')
-        .order('data_apresentacao', { ascending: false })
-        .order('hora_apresentacao', { ascending: false });
+        .order('criado_em', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        setDebugInfo({ type: 'fetch_error', error });
+        throw error;
+      }
+      
       if (data) {
         setClientes(data);
         calculateStats(data);
+        setUltimaAtualizacao(new Date());
+        if (!isSilent && !loading) {
+          setMsgSucesso("Dados atualizados com sucesso.");
+          setTimeout(() => setMsgSucesso(null), 3000);
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao buscar clientes:", error);
+      setDebugInfo({ last_error: error.message, time: new Date().toISOString() });
     } finally {
       setLoading(false);
+      setUpdating(false);
     }
-  }, []);
+  }, [loading]);
+
+  const testarConexao = async () => {
+    setUpdating(true);
+    try {
+      const { data, error } = await supabase
+        .from('clientes_apresentacao')
+        .select('id, nome_casal, criado_em')
+        .limit(1);
+      
+      if (error) throw error;
+      alert("Conexão com Supabase funcionando.");
+      setDebugInfo({ last_test: 'success', data });
+    } catch (error: any) {
+      alert(`Erro na conexão: ${error.message}`);
+      setDebugInfo({ last_test: 'failure', error });
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const testarSalvamento = async () => {
+    setUpdating(true);
+    const token = "teste-" + Date.now();
+    const payload = {
+      nome_casal: "TESTE SISTEMA",
+      sala_apresentacao: "Sala Teste",
+      data_apresentacao: new Date().toISOString().split('T')[0],
+      hora_apresentacao: "12:00",
+      status_apresentacao: "aguardando_checkin",
+      token_cliente: token
+    };
+
+    try {
+      const { data, error } = await supabase
+        .from('clientes_apresentacao')
+        .insert([payload])
+        .select();
+
+      if (error) throw error;
+      alert("Salvamento de teste concluído com sucesso!");
+      setDebugInfo({ last_save_test: 'success', data });
+      fetchClientes(true);
+    } catch (error: any) {
+      alert(`Erro no salvamento de teste: ${error.message}`);
+      setDebugInfo({ last_save_test: 'failure', error, payload });
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   useEffect(() => {
     fetchClientes();
     const channel = supabase
       .channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes_apresentacao' }, () => {
-        fetchClientes();
+        fetchClientes(true);
       })
       .subscribe();
     
@@ -143,6 +209,23 @@ export default function RecepcaoDashboard() {
 
           <div className="flex items-center gap-4">
             <button 
+              onClick={() => fetchClientes()}
+              disabled={updating}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 font-bold rounded-xl hover:bg-emerald-100 transition-all disabled:opacity-50"
+            >
+              <Timer size={18} className={updating ? "animate-spin" : ""} />
+              {updating ? "Atualizando..." : "Atualizar"}
+            </button>
+            
+            <button 
+              onClick={() => setShowDebug(!showDebug)}
+              className={`p-2.5 rounded-xl transition-all border ${showDebug ? 'bg-slate-900 text-white' : 'text-slate-400 hover:text-slate-900 border-transparent hover:border-slate-200'}`}
+              title="Área de Depuração"
+            >
+              <ShieldAlert size={20} />
+            </button>
+
+            <button 
               onClick={() => navigate("/recepcao/cadastro")}
               className="hidden md:flex items-center gap-2 px-6 py-2.5 bg-slate-900 hover:bg-emerald-600 text-white font-bold rounded-xl transition-all shadow-lg shadow-slate-200"
             >
@@ -157,6 +240,64 @@ export default function RecepcaoDashboard() {
       </nav>
 
       <main className="flex-1 p-6 md:p-10 max-w-7xl mx-auto w-full space-y-10">
+        {/* Alerts & Messages */}
+        <AnimatePresence>
+          {msgSucesso && (
+            <motion.div 
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="bg-emerald-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-emerald-200/50 flex items-center justify-between"
+            >
+              <span className="flex items-center gap-2"><CheckCircle2 size={18} /> {msgSucesso}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Debug Area */}
+        <AnimatePresence>
+          {showDebug && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden mb-10"
+            >
+              <div className="bg-slate-900 rounded-3xl p-8 text-slate-300 border border-slate-800 shadow-2xl">
+                 <div className="flex items-center justify-between mb-8">
+                    <h3 className="text-white font-bold flex items-center gap-2"><ShieldAlert size={20} className="text-red-400"/> Depuração Supabase</h3>
+                    <div className="flex gap-3">
+                       <button onClick={testarConexao} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold transition-all">Testar Conexão</button>
+                       <button onClick={testarSalvamento} className="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg text-xs font-bold transition-all">Testar Salvamento</button>
+                    </div>
+                 </div>
+
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 font-mono text-xs">
+                    <div className="space-y-4">
+                       <p><span className="text-slate-500">URL:</span> {import.meta.env.VITE_SUPABASE_URL}</p>
+                       <p><span className="text-slate-500">Tabela:</span> clientes_apresentacao</p>
+                       <p><span className="text-slate-500">Auth Status:</span> {localStorage.getItem("lagoa_auth") === "true" ? "LOGADO (LOCAL)" : "DESLOGADO"}</p>
+                       <p><span className="text-slate-500">Conexão:</span> <span className={debugInfo?.last_test === 'failure' ? "text-red-400" : "text-emerald-400"}>{debugInfo?.last_test || 'não testada'}</span></p>
+                    </div>
+                    <div className="bg-black/20 p-4 rounded-xl border border-white/5 max-h-40 overflow-y-auto">
+                       <p className="text-slate-500 mb-2 uppercase text-[10px] font-bold">Última Resposta / Erro:</p>
+                       <pre className="text-[10px]">{JSON.stringify(debugInfo, null, 2)}</pre>
+                    </div>
+                 </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="flex items-center justify-between">
+           <div>
+              <h2 className="text-2xl font-bold text-slate-900">Visão Geral</h2>
+              {ultimaAtualizacao && (
+                <p className="text-xs text-slate-400 font-medium">Última atualização: {ultimaAtualizacao.toLocaleString('pt-BR')}</p>
+              )}
+           </div>
+        </div>
+
         {/* Stats Cards */}
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
           <StatCard icon={<Users size={24} />} label="Total" value={stats.total} color="bg-blue-500" />

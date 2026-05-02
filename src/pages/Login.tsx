@@ -10,12 +10,11 @@ export default function Login() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // Simples para recepção conforme solicitado (não usar Firebase/Google Auth/OAuth)
-    if (username === "recepcao" && password === "lagoa2026") {
+    if (username === "recepcao" && password === "123456") {
       localStorage.setItem("lagoa_auth", "true");
       navigate("/recepcao/dashboard");
     } else {
-      alert("Credenciais inválidas");
+      alert("Usuário ou senha incorretos.");
     }
   };
 
